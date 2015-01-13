@@ -1,9 +1,9 @@
 /*
-		 "// ------------------------------------------------------------------------------------------------- 
-		 "// Copyright (c) 2014 Pruthvi and Rachana Raj Sunku , University of Arizona" 
-		 "// Permission to copy is granted provided that this header remains" 
-		 "// intact. This software is provided with no warranties" 
-		 "// -------------------------------------------------------------------------------------------------
+  "// ------------------------------------------------------------------------------------------------- 
+  "// Copyright (c) 2014 Pruthvi and Rachana Raj Sunku , University of Arizona" 
+  "// Permission to copy is granted provided that this header remains" 
+  "// intact. This software is provided with no warranties" 
+ "// -------------------------------------------------------------------------------------------------
 */
 
 #include <mpi.h>
