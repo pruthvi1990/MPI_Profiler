@@ -800,44 +800,6 @@ if(MPI_rank==0)
 	index=0;
 	count_x =0;
 	count_y=0;
-	//function to find the critical path
-	struct node* crit_node_array;
-	crit_node_array = (struct node *)malloc(sizeof(struct node)*sum);
-	int citical_path(struct node* mpi_node ){
-
-	for(x=0;x<num_procs;x++){
-		for(x1=0; x1<count_all[index];x1++){
-			if (!strcmp (array[x][x1].func_name ,"MPI_Init") && x!=0){
-				continue;
-			}
-			if (!strcmp (array[x][x1].func_name ,"MPI_Finalize") && x!=num_procs-1){
-				break;
-			}
-			for(y=0; y<num_procs;y++){
-				for (y1=0;y1<count_all[y]; y1++){
-					if (!strcmp (array[y][y1].func_name ,"MPI_Init") && y!=0){
-						continue;
-					}
-					if (!strcmp (array[y][y1].func_name ,"MPI_Finalize") && y!=num_procs-1)
-						break;
-			
-						if (array[x][x1].func_name == "MPI_Finalize")
-							return;
-							
-						if (adj_matrix[count_x][count_y])
-						citical_path(&array[y][y1]);	
-				
-
-				count_y++;
-				} 
-			}
-			count_y=0;
-			count_x++;
-		}
-		index++;
-	} 
-	} //end of critical path
-
 
 //function to find the critical path
 
