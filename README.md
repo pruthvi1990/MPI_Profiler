@@ -245,68 +245,83 @@ Now the generated wrappers to `MPI_Send`, `MPI_Isend`, and `MPI_Ibsend` will do 
 * `{{<varname>}}` *(not yet supported)*
 	Access a variable declared by `{{vardecl}}`.
 
-Notes on the fortran wrappers
--------------------------------
-    #if (!defined(MPICH_HAS_C2F) && defined(MPICH_NAME) && (MPICH_NAME == 1))
-	    /* MPICH call */
-        return_val = MPI_Abort((MPI_Comm)(*arg_0), *arg_1);
-	#else
-        /* MPI-2 safe call */
-	    return_val = MPI_Abort(MPI_Comm_f2c(*arg_0), *arg_1);
-	#endif
+#MPI Profiler to generate the task Graph and to calculate the Critical Path
 
-This is the part of the wrapper that delegates from Fortran
-to C.  There are two ways to do that.  The MPI-2 way is to
-call the appropriate _f2c call on the handle and pass that
-to the C function.  The f2c/c2f calls are also available in
-some versions of MPICH1, but not all of them (I believe they
-were backported), so you can do the MPI-2 thing if
-`MPICH_HAS_C2F` is defined.
+##Creating a Profiler
 
-If c2f functions are not around, then the script tries to
-figure out if it's dealing with MPICH1, where all the
-handles are ints.  In that case, you can just pass the int
-through.
+The way you create the profiler is by using the PMPI layer. Essentially, MPI is designed in such a way that
+each MPI function is defined as a weak symbol. That means that all MPI functions have an implementation
+within the MPI library. However, if you, the programmer, override that implementation by creating your
+own version of the MPI function, your version will instead be invoked. The existing MPI library version of
+the calls simply invokes a function by the same name except there is a “P” before it. For example, if the
+user invokes MPI Barrier(MPI COMM WORLD), the MPI library implementation of this function looks
+as follows:
 
-Right now, if it's not *specifically* MPICH1, wrap.py does
-the MPI-2 thing.  From what Barry was telling me, your MPI
-environment might have int handles, but it is not MPICH1.
-So you could either define all the `MPI_Foo_c2f`/`MPI_Foo_f2c`
-calls to identity macros, e.g.:
+MPI_Barrier(MPI_COMM_WORLD) {
+PMPI_Barrier(MPI_COMM_WORLD);
+}
 
-    #define MPI_File_c2f(x) (x)
-    #define MPI_File_f2c(x) (x)
+All the “real” code that implements a barrier is within PMPI Barrier. This allows you to override
+MPI Barrier as follows:
+MPI_Barrier(MPI_COMM_WORLD) {
+Pre_MPI() // you probably want to pass in an MPI opcode here
+PMPI_Barrier(MPI_COMM_WORLD);
+Post_MPI() // you probably want to pass in an MPI opcode here
+}
 
-or you could add something to wrap.py to force the
-int-passing behavior.  I'm not sure if you have to care
-about this, but I thought I'd point it out.
+For example, one thing one might do within your version of MPI Barrier is add one to a counter, so you
+can keep the total number of barriers executed.
+To provide a generic wrapper that will intercept all functions, please use Todd Gamblin’s MPI wrapper
+generator (not required if you really feel like you need to implement this yourself, but recommended). See
+https://github.com/tgamblin/wrap for details.
 
--s, or 'structural' mode
--------------------------------
+##MPI Task Graph
 
-If you use the `-s` option, this skips the includes and defines used for C
-wrapper functions.  This is useful if you want to use wrap to generate
-non-C files, such as XML.
+During execution of the MPI program, you need to generate an MPI task graph. Below, we define terms and
+explain how to do this. An MPI task graph is a directed, weighted graph with the following attributes:
+ There is one vertex corresponding to each invoked MPI operation (if an MPI operation is invoked
+n times, there will be n vertices for that MPI operation).
 
-If you use -s, we recommend that you avoid using `{{fn}}` and `{{fnall}}`,
-as these generate proper wrapper functions that rely on some of the
-header information.  Instead, use `{{foreachfn}}` and `{{forallfn}}`, as
-these do not generate wrappers around each iteration of the macro.
+1. There is an edge between every pair of consecutive vertices v and w, and the edge weight is the wallclock
+time that has elapsed from the end of the MPI operation corresponding to v and the beginning
+of the MPI operation corresponding to w.
+2. If the MPI operation is an MPI Send or MPI Isend, then there is also an edge from vertex v (where
+v corresponds to the MPI Send or MPI Isend) to a vertex z, which is the matching MPI Recv or
+MPI Wait call, with weight equal to the message latency. Assume all MPI Send operations do not
+block, and assume that an MPI rank never sends to itself.
+3. To estimate the message latency, you are to run a series of benchmarks that will generate a function
+that takes as input a message size (when necessary) and returns the associated message latency. This
+experiment requires just two nodes for point-to-point messages. For the point-to-point experiments,
+set up a program that takes as input a message size and then has rank 0 send to rank 1 a message of
+that size and then receive a message (from rank 1) of that size. Rank 1 performs those actions in the
+opposite order (first receive, then send). This “ping-pong” should be done a large number of times.
+The message latency is then the total time divided by the number of repetitions, divided by 2 (since
+we are estimating one-way latency). Perform this experiment for many different message sizes, e.g.,
+4 bytes, 8 bytes, 16 bytes, : : :, 32K bytes. Take the series of (byte, time) pairs and perform a linear
+regression to get the function you need. Software packages such as Excel, Google Spreadsheet, and
+R can do the regression. Note that for the collectives, your regression will have two independent
+variables. (Also, you should execute all the collectives, as MPI Alltoall has a different latency
+than a barrier.)
+4.  There must be a single vertex representing each of MPI Init and MPI Finalize, with appropriate
+edges to the first operation on each rank (for MPI Init) and edges from the last operation on each
+rank (for MPI Finalize).
+5. For collectives (specifically, MPI Barrier, MPI Alltoall, MPI Scatter, MPI Gather,
+MPI Reduce, and MPI Allreduce), you should have one vertex with a fan-in and fan-out (see
+Figure 1). Note that this is not actually correct for most of the collectives, but we are making a
+simplifying assumption. For all collectives, the (vertex) weight should be the based on your regression
+function for that collective.
+6. Also, convert MPI Waitall into multiple equivalent calls to MPI Wait.
 
-e.g. if you want to generate a simple XML file with descriptions of the
-MPI arguments, you might write this in a wrapper file:
+##Critical Path
 
-    {{forallfn fun}}
-        <function name="{{fun}}" args="{{args}}"/>
-    {{endforallfn}}
-
-We don't disallow `{{fnall}}` or `{{fn}}` with `-s`, but If you used
-`{{fnall}}` here, each XML tag would have a C wrapper function around it,
-which is probably NOT what you want.
-
-
-1. Anthony Chan, William Gropp and Weing Lusk.  *User's Guide for MPE:
-Extensions for MPI Programs*.  ANL/MCS-TM-ANL-98/xx.
-ftp://ftp.mcs.anl.gov/pub/mpi/mpeman.pdf
-
+>After program execution (at MPI Finalize), the MPI critical path graph should then be displayed on the
+screen, and, you must save the critical path itself to a file in the following strict format: (1) each vertex
+must contain the MPI function name with the exact capitalization and punctuation conventions used in MPI
+itself, followed by one blank space and then the rank; (2) for each edge, (a) if it is a computation edge, the
+integer value (rounded), or (b) if it is a latency edge, the number of total bytes in the message. Separate all
+fields by one blank space. For MPI Init, MPI Finalize, and any collective, use -1 for the rank. Please
+output this into the file critPath.out. Figure 2 has an example task graph and corresponding output to
+be placed in critPath.out. Note that the send-receive edges have the number of bytes in parentheses.
+For on-screen display, you should use the “DOT” tool (see: http://www.graphviz.org/, along
+with the “Cluster” example at http://www.graphviz.org/Gallery/directed/cluster.html
 
