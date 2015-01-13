@@ -1,0 +1,43 @@
+digraph taskgraph {
+
+
+subgraph   cluster_0  { 
+node [style = filled]; 
+ MPI_Send0 ->  MPI_Send1 ->  MPI_Send2 ->  MPI_Send3 ->  MPI_Send4 ->  MPI_Send5 ->  MPI_Send6 ->  MPI_Send7 ->  MPI_Send8 ->  MPI_Send9 ->  MPI_Send10 ->  MPI_Send11 ->  MPI_Recv12 ->  MPI_Recv13 ->  MPI_Recv14 ->  MPI_Recv15 ->  MPI_Recv16 ->  MPI_Recv17 ->  MPI_Recv18 ->  MPI_Recv19 ->  MPI_Recv20 ->  MPI_Recv21;
+ label = "rank #cluster_0";
+color = blue
+}
+
+
+subgraph   cluster_1  { 
+node [style = filled]; 
+ MPI_Recv22 ->  MPI_Recv23 ->  MPI_Recv24 ->  MPI_Recv25 ->  MPI_Send26 ->  MPI_Send27 ->  MPI_Send28 ->  MPI_Send29;
+ label = "rank #cluster_1";
+color = blue
+}
+
+
+subgraph   cluster_2  { 
+node [style = filled]; 
+ MPI_Recv30 ->  MPI_Recv31 ->  MPI_Recv32 ->  MPI_Recv33 ->  MPI_Send34 ->  MPI_Send35 ->  MPI_Send36 ->  MPI_Send37;
+ label = "rank #cluster_2";
+color = blue
+}
+
+
+subgraph   cluster_3  { 
+node [style = filled]; 
+ MPI_Recv38 ->  MPI_Recv39 ->  MPI_Recv40 ->  MPI_Recv41 ->  MPI_Send42 ->  MPI_Send43 ->  MPI_Send44 ->  MPI_Send45;
+ label = "rank #cluster_3";
+color = blue
+}
+MPI_Init->MPI_Send;
+MPI_Init->MPI_Recv22;
+MPI_Recv21-> MPI_Finalize;
+MPI_Init->MPI_Recv30;
+MPI_Send29-> MPI_Finalize;
+MPI_Init->MPI_Recv38;
+MPI_Send37-> MPI_Finalize;
+MPI_Init->46;
+MPI_Send45-> MPI_Finalize;
+}
